@@ -1,2 +1,2 @@
 # adventofcode
-just run node <puzzle>.js
+just run `node <puzzle>.js`

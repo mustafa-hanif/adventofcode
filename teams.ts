@@ -1,4 +1,3 @@
-import { match } from "assert";
 import {
   format,
   add,
@@ -68,10 +67,10 @@ class Matches {
   getMatchCount() {
     return this.matches.length;
   }
-  assignMatch(slot: Slot, match: Match, matchIndex: number) {
+  assignMatch(slot: Slot, match: Match) {
     slot.setMatch(match);
     this.slots.push(slot);
-    this.matches.splice(matchIndex, 1);
+    this.matches.splice(this.matches.findIndex(m => m.id === match.id), 1);
   }
   getAllAssignedSlots() {
     return this.slots;
@@ -80,19 +79,11 @@ class Matches {
     return this.matches;
   }
   getNextMatch() {
-    while (
-      this.matches[this.index % this.matches.length].group === this.lastGroup
-    ) {
-      this.index++;
-      if (this.index === this.lastIndex) {
-        break;
-      }
-    }
-    const nextIndex = this.index % this.matches.length;
-    this.lastIndex = nextIndex;
-    this.index = nextIndex;
-    this.lastGroup = this.matches[nextIndex].group;
-    return this.matches[nextIndex];
+    const index = this.index++ % this.matches.length;
+    // console.log(index);
+    // console.log(this.matches.length);
+    // return this.matches[index];
+    return this.matches[index];
   }
 }
 
@@ -102,6 +93,7 @@ class Match {
   teamB: string;
   venue: string;
   group: string;
+  id: string;
   startTime: Date;
   endTime: Date;
   constructor(
@@ -113,6 +105,7 @@ class Match {
   ) {
     this.teamA = teamA;
     this.teamB = teamB;
+    this.id = `${teamA}${teamB}`;
     this.group = group;
     this.startTime = startTime ?? new Date();
     this.endTime = endTime ?? new Date();
@@ -146,11 +139,13 @@ class Slot {
   startTime: Date;
   endTime: Date;
   match: Match;
+  day: number;
 
-  constructor(venue: string, startTime: Date, endTime: Date) {
+  constructor(venue: string, startTime: Date, endTime: Date, day: number) {
     this.venue = new Venue(venue);
     this.startTime = startTime;
     this.endTime = endTime;
+    this.day = day;
   }
 
   setMatch(match: Match) {
@@ -158,8 +153,11 @@ class Slot {
     this.venue.currentMatch = match;
   }
 
+  /**
+   * @returns formatted slot output
+   */
   format() {
-    return `${this?.match?.format()} ${this.venue.format()} at ${format(
+    return `Day: ${this.day + 1} ${this?.match?.format()} ${this.venue.format()} at ${format(
       this.startTime,
       "HH:mm"
     )} to ${format(this.endTime, "HH:mm")}`;
@@ -189,7 +187,18 @@ const getMatches = (
 };
 
 const _venues: Venue[] = [];
-// generate a fixture algorithm
+/**
+ * @param teams array of teams
+ * @params teams_count number of teams
+ * @param venues array of venues
+ * @param tounamment_start_date start date of tournament
+ * @param tounamment_end_date end date of tournament
+ * @param break_time break time between matches
+ * @param match_duration duration of each match
+ * @param match_start_time start time of matches
+ * @param match_end_time end time of matches
+ * @returns generate a fixture algorithm
+ */
 function main(
   teams: string[],
   teams_count: number,
@@ -208,7 +217,7 @@ function main(
   // get all possible matches between teams
   const matches = getMatches(teams, teams_count, no_of_groups);
   matches.forEach((match) => {
-    console.log(match.format());
+    // console.log(match.format());
   });
 
   // get all possible slots
@@ -223,18 +232,29 @@ function main(
       );
 
       let current_start_time = parse(match_start_time, "HH:mm", new Date());
-
+      _venues.forEach((venue) => {
+        venue.isBusy = false;
+      });
       for (let j = 0; j < totalMinutes; j++) {
         _venues.forEach((venue) => {
           if (!venue.isBusy) {
+            /**
+             * `match_duration` hours from start time plus current minutes `j`
+             */
             const current_end_time = add(addMinutes(current_start_time, j), {
               hours: match_duration,
             });
+
+            /**
+             * slot with venue name, start time, end time and day
+             */
             const slot = new Slot(
               venue.name,
               addMinutes(current_start_time, j),
-              current_end_time
+              current_end_time,
+              i // day
             );
+
             slots.push(slot);
 
             venue.isBusy = true;
@@ -259,35 +279,22 @@ function main(
     }
   });
 
-  // slots.forEach((slot) => {
-  //   console.log(slot.format());
-  // });
-
   const matchList = new Matches(matches);
+  // console.log(slots.length, matchList.getMatchCount());
   slots.forEach((slot) => {
-    for (let matchIndex = 0; matchIndex < matchList.getMatchCount(); matchIndex++) {
-      const match = matchList.getNextMatch();
-      if (match) {
-        if (
-          isTeamOverLap(
-            match.teamA,
-            match.teamB,
-            slots,
-            slot.startTime,
-            slot.endTime
-          )
-        ) {
-          // console.log("team overlap", match.format());
-          continue;
-        }
-        matchList.assignMatch(slot, match, matchIndex);
-        break;
-      }
+    const match = matchList.getNextMatch();
+    if (match) {
+      matchList.assignMatch(slot, match);
     }
   });
 
+  console.log('assigned slots', matchList.getAllAssignedSlots().length);
   matchList.getAllAssignedSlots().forEach((slot) => {
     console.log(slot.format());
+  });
+
+  matchList.getRemainingMatches().forEach((match) => {
+    // console.log(match.format());
   });
 }
 
